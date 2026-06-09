@@ -209,17 +209,20 @@ tbody td:first-child{text-align:left;font-weight:500;color:var(--ink)}
 <div class="cw" style="height:480px"><canvas id="chA"></canvas></div>
 </div></div>
 
-<div class="rw r2">
+<div class="rw r1">
 <div class="cd"><div class="hd"><div><div class="ht">🏆 Top 10 Ranking de Marcas</div><div class="hs" id="csR"></div></div></div>
 <div class="bd" style="padding:0"><div class="twrap"><table id="tR"><thead><tr></tr></thead><tbody></tbody></table></div></div></div>
-<div class="cd"><div class="hd"><div><div class="ht">📈 Market Share Mensal — Top 10</div><div class="hs">Barras empilhadas %</div></div></div>
-<div class="cw" style="height:380px"><canvas id="chMS"></canvas></div></div>
+</div>
+
+<div class="rw r1">
+<div class="cd"><div class="hd"><div><div class="ht">📈 Market Share Mensal — Top 10</div><div class="hs" id="csMSch">Top 10 marcas por média de market share no período filtrado</div></div></div>
+<div class="cw" style="height:420px"><canvas id="chMS"></canvas></div></div>
 </div>
 
 <div class="rw r1"><div class="cd">
 <div class="hd"><div><div class="ht">📋 Market Share por Categoria e Subcategoria</div><div class="hs" id="csMS"></div></div></div>
 <div class="bd">
-<div class="tabs" id="msT"><div class="tab a" data-t="c3" onclick="swMS(this)">Categoria (Nível 3)</div><div class="tab" data-t="c4" onclick="swMS(this)">Subcat (Nível 4)</div><div class="tab" data-t="c5" onclick="swMS(this)">Subcat (Nível 5)</div></div>
+<div class="tabs" id="msT"><div class="tab a" data-t="c3" onclick="swMS(this)">Categoria (Nível 3)</div><div class="tab" data-t="c4" onclick="swMS(this)">Subcat (Nível 4)</div><div class="tab" data-t="c5" onclick="swMS(this)">Subcat (Nível 5)</div><div class="tab" data-t="m" onclick="swMS(this)">Marcas</div></div>
 <div id="msW"></div>
 </div></div></div>
 
@@ -645,69 +648,118 @@ function rRank(fl){
 
 // ===== MS CHART =====
 function rMSCh(fl){
-  const d=fB(DB.ba,fl);const bT=ag(d,r=>r.m);
-  const t10=Array.from(bT.entries()).sort((a,b)=>b[1].v-a[1].v).slice(0,10).map(([k])=>k);
-  const mM=new Map();d.forEach(r=>{if(!t10.includes(r.m))return;const k=`${r.ano}-${r.mn}`;if(!mM.has(k))mM.set(k,{ano:r.ano,mn:r.mn,b:{}});mM.get(k).b[r.m]=(mM.get(k).b[r.m]||0)+r.v});
-  const mT=new Map();d.forEach(r=>{const k=`${r.ano}-${r.mn}`;mT.set(k,(mT.get(k)||0)+r.v)});
-  const sM2=Array.from(mM.values()).sort((a,b)=>a.ano!==b.ano?a.ano-b.ano:a.mn-b.mn);
-  const lb=sM2.map(m=>`${MN[m.mn-1]}/${m.ano}`);
-  const ds2=t10.map((b,i)=>({label:b,data:sM2.map(m=>{const t=mT.get(`${m.ano}-${m.mn}`)||1;return+((m.b[b]||0)/t*100).toFixed(2)}),backgroundColor:CC[i%CC.length],stack:'s'}));
+  const ref=gRef(fl);
+  const refYear=ref?ref.ano:2026;
+  const d=fB(DB.ba,fl);
+  // Build monthly aggregates: for each month, sum per brand AND total
+  const monthMap=new Map();
+  d.forEach(r=>{
+    const k=`${r.ano}-${r.mn}`;
+    if(!monthMap.has(k))monthMap.set(k,{ano:r.ano,mn:r.mn,brands:{},total:0});
+    const mo=monthMap.get(k);
+    mo.brands[r.m]=(mo.brands[r.m]||0)+r.v;
+    mo.total+=r.v;
+  });
+  const months=Array.from(monthMap.values()).sort((a,b)=>a.ano!==b.ano?a.ano-b.ano:a.mn-b.mn);
+  if(!months.length){dCh('chMS');return}
+  // RANKING: use only months from reference year (fallback to all if ref year has no data)
+  const monthsInRef=months.filter(m=>m.ano===refYear);
+  const rankingMonths=monthsInRef.length?monthsInRef:months;
+  const allBrands=new Set();
+  months.forEach(m=>Object.keys(m.brands).forEach(b=>allBrands.add(b)));
+  const avgShare=new Map();
+  allBrands.forEach(b=>{
+    let sum=0,n=0;
+    rankingMonths.forEach(m=>{const s=m.total?(m.brands[b]||0)/m.total:0;sum+=s;n++});
+    avgShare.set(b,n?sum/n:0);
+  });
+  // Top 10 by ref-year AVERAGE share
+  const t10=Array.from(avgShare.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([k])=>k);
+  // Build chart series across ALL visible months (full timeline)
+  const lb=months.map(m=>`${MN[m.mn-1]}/${m.ano}`);
+  const ds2=t10.map((b,i)=>({label:b,data:months.map(m=>{const t=m.total||1;return+((m.brands[b]||0)/t*100).toFixed(2)}),backgroundColor:CC[i%CC.length],stack:'s'}));
+  // Subtitle: top 3 by ref-year avg MS
+  const top3=t10.slice(0,3).map(b=>`${b} ${pc(avgShare.get(b))}`).join(' · ');
+  const elS=document.getElementById('csMSch');
+  if(elS)elS.textContent=`Top 10 por média MS em ${refYear} | Líderes: ${top3}`;
   dCh('chMS');
   CH['chMS']=new Chart(document.getElementById('chMS').getContext('2d'),{type:'bar',data:{labels:lb,datasets:ds2},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:6,boxWidth:10,usePointStyle:true,pointStyle:'rectRounded'}},
-        tooltip:{callbacks:{label(c){return` ${c.dataset.label}: ${c.raw}%`}}},
+        tooltip:{callbacks:{label(c){const av=avgShare.get(c.dataset.label);return` ${c.dataset.label}: ${c.raw}% (média: ${(av*100).toFixed(2)}%)`}}},
         datalabels:{display:ctx=>{const last=ctx.chart.data.labels.length-1;return ctx.dataIndex===last&&ctx.raw>=3.5},color:'#fff',font:{size:8,weight:700,lineHeight:1.1},textAlign:'center',formatter:(v,ctx)=>[ctx.dataset.label,v.toFixed(2)+'%']}},
       scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:9},color:'#475569'}},y:{stacked:true,max:100,ticks:{callback:v=>v+'%',font:{size:9},color:'#475569'},grid:{color:'rgba(15,29,51,.04)'}}}
     },plugins:[ChartDataLabels]});
+  // Update subtitle showing average ranking
+  const subEl=document.getElementById('csMSch');
+  if(subEl){
+    const avgList=t10.slice(0,3).map(b=>`${b} ${(avgShare.get(b)*100).toFixed(2)}%`).join(' | ');
+    subEl.textContent=`Top 10 por média mensal de MS no período | Líderes: ${avgList}`;
+  }
 }
 
 // ===== MS TABLE =====
 function rMSTbl(fl){
   const ref=gRef(fl);if(!ref)return;
   const d=fB(DB.ba,fl);const ck=msTab;
-  const cats=[...new Set(d.map(r=>r[ck]))].filter(c=>c&&c!=='-').sort();
+  const isMarcas=ck==='m';
+  const cats=isMarcas?['__ALL__']:[...new Set(d.map(r=>r[ck]))].filter(c=>c&&c!=='-').sort();
   const ams=new Map();d.forEach(r=>{const k=r.ano*100+r.mn;if(!ams.has(k))ams.set(k,{ano:r.ano,mn:r.mn})});
   const sms=Array.from(ams.values()).sort((a,b)=>a.ano!==b.ano?a.ano-b.ano:a.mn-b.mn);
   const m26=sms.filter(m=>m.ano===2026).map(m=>m.mn);
   const maxMn26=m26.length?Math.max(...m26):0;
-  // Determine which quarters globally have data based on the available months
   const monthsByYear={2025:new Set(sms.filter(m=>m.ano===2025).map(m=>m.mn)),2026:new Set(sms.filter(m=>m.ano===2026).map(m=>m.mn))};
   const qHasData=(ano,q)=>{const ms=q===1?[1,2,3]:q===2?[4,5,6]:q===3?[7,8,9]:[10,11,12];return ms.some(m=>monthsByYear[ano].has(m))};
   const visibleQ25=[1,2,3,4].filter(q=>qHasData(2025,q));
   const visibleQ26=[1,2,3,4].filter(q=>qHasData(2026,q));
+  const topN=isMarcas?15:10;
+  const monthsInRefAll=sms.filter(m=>m.ano===ref.ano);
   let html='';
   cats.forEach(cat=>{
-    const cd=d.filter(r=>r[ck]===cat);if(!cd.length)return;
-    const combined=ag(cd,r=>r.m);
-    const top10=Array.from(combined.entries()).sort((a,b)=>b[1].v-a[1].v).slice(0,10).map(([k])=>k);
-    if(!top10.length)return;
+    const cd=isMarcas?d:d.filter(r=>r[ck]===cat);if(!cd.length)return;
+    // Ranking: average MS in REF YEAR only (fallback to all months if no ref year data)
+    const monthsInRef=monthsInRefAll.filter(m=>cd.some(r=>r.ano===m.ano&&r.mn===m.mn));
+    const rankingMonths=monthsInRef.length?monthsInRef:sms;
+    const brandsInCd=[...new Set(cd.map(r=>r.m))].filter(b=>b&&b!=='-'&&b!=='nan');
+    const avgMSRef=new Map();
+    brandsInCd.forEach(b=>{
+      let sum=0,n=0;
+      rankingMonths.forEach(m=>{
+        const rows=cd.filter(r=>r.ano===m.ano&&r.mn===m.mn);
+        const total=rows.reduce((a,r)=>a+r.v,0);
+        const brandV=rows.filter(r=>r.m===b).reduce((a,r)=>a+r.v,0);
+        sum+=total?brandV/total:0;n++;
+      });
+      avgMSRef.set(b,n?sum/n:0);
+    });
+    const topX=Array.from(avgMSRef.entries()).sort((a,b)=>b[1]-a[1]).slice(0,topN).map(([k])=>k);
+    if(!topX.length)return;
     const mShare=(rows,brands)=>{const m=ag(rows,r=>r.m);const t=Array.from(m.values()).reduce((a,b)=>a+b.v,0);return brands.map(b=>t?(m.get(b)||{v:0}).v/t:0)};
-    const monthVals=sms.map(m=>mShare(cd.filter(r=>r.ano===m.ano&&r.mn===m.mn),top10));
+    const monthVals=sms.map(m=>mShare(cd.filter(r=>r.ano===m.ano&&r.mn===m.mn),topX));
     const qR=(a,q)=>{const ms=q===1?[1,2,3]:q===2?[4,5,6]:q===3?[7,8,9]:[10,11,12];return cd.filter(r=>r.ano===a&&ms.includes(r.mn))};
-    const q25=[mShare(qR(2025,1),top10),mShare(qR(2025,2),top10),mShare(qR(2025,3),top10),mShare(qR(2025,4),top10)];
-    const q26=[mShare(qR(2026,1),top10),mShare(qR(2026,2),top10),mShare(qR(2026,3),top10),mShare(qR(2026,4),top10)];
-    const avg25=top10.map((_,bi)=>{const vals=sms.filter(m=>m.ano===2025&&m.mn<=maxMn26).map(m=>{const idx=sms.indexOf(m);return monthVals[idx][bi]});return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0});
-    const avg26=top10.map((_,bi)=>{const vals=sms.filter(m=>m.ano===2026).map(m=>{const idx=sms.indexOf(m);return monthVals[idx][bi]});return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0});
+    const q25=[mShare(qR(2025,1),topX),mShare(qR(2025,2),topX),mShare(qR(2025,3),topX),mShare(qR(2025,4),topX)];
+    const q26=[mShare(qR(2026,1),topX),mShare(qR(2026,2),topX),mShare(qR(2026,3),topX),mShare(qR(2026,4),topX)];
+    const avg25=topX.map((_,bi)=>{const vals=sms.filter(m=>m.ano===2025&&m.mn<=maxMn26).map(m=>{const idx=sms.indexOf(m);return monthVals[idx][bi]});return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0});
+    const avg26=topX.map((_,bi)=>{const vals=sms.filter(m=>m.ano===2026).map(m=>{const idx=sms.indexOf(m);return monthVals[idx][bi]});return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0});
     const delta=avg26.map((v,i)=>v-avg25[i]);
-    html+=`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;color:var(--navy);padding:5px 0;border-bottom:2px solid var(--blue);margin-bottom:3px">${cat}</div>`;
+    const title=isMarcas?`Top ${topN} Marcas — Visão Geral da Categoria`:cat;
+    html+=`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;color:var(--navy);padding:5px 0;border-bottom:2px solid var(--blue);margin-bottom:3px">${title}</div>`;
     html+='<table class="ms-tbl"><thead><tr><th style="text-align:left">Marca</th>';
     sms.forEach(m=>html+=`<th>${MN[m.mn-1]}/${String(m.ano).slice(2)}</th>`);
     visibleQ25.forEach(q=>html+=`<th>Q${q}/25</th>`);
     visibleQ26.forEach(q=>html+=`<th>Q${q}/26</th>`);
     html+='<th>Méd 25</th><th>Méd 26</th><th>Δ</th></tr></thead><tbody>';
-    // Build column values for color scale - skip hidden quarters
     const allColVals=[];
     const totalCols=sms.length+visibleQ25.length+visibleQ26.length+3;
     for(let ci=0;ci<totalCols;ci++)allColVals.push([]);
-    top10.forEach((_,bi)=>{
+    topX.forEach((_,bi)=>{
       sms.forEach((_,mi)=>allColVals[mi].push(monthVals[mi][bi]));
       let off=sms.length;
       visibleQ25.forEach(q=>{allColVals[off++].push(q25[q-1][bi])});
       visibleQ26.forEach(q=>{allColVals[off++].push(q26[q-1][bi])});
       allColVals[off++].push(avg25[bi]);allColVals[off++].push(avg26[bi]);allColVals[off++].push(delta[bi]);
     });
-    top10.forEach((b,bi)=>{
+    topX.forEach((b,bi)=>{
       const isDl=b==='DELLAMED';
       html+=`<tr class="${isDl?'dl':''}"><td>${b}</td>`;
       sms.forEach((_,mi)=>{const v=monthVals[mi][bi];html+=`<td class="msc" style="${msCol(v,allColVals[mi])}">${pc(v)}</td>`});
@@ -723,7 +775,8 @@ function rMSTbl(fl){
   });
   document.getElementById('msW').innerHTML=html||'<div style="padding:20px;color:var(--mute);text-align:center">Sem dados</div>';
   const qInfo=`Qtrs exibidos: 25=${visibleQ25.length?visibleQ25.map(q=>'Q'+q).join(','):'—'} | 26=${visibleQ26.length?visibleQ26.map(q=>'Q'+q).join(','):'—'}`;
-  document.getElementById('csMS').textContent=`Ref: ${MN[ref.mn-1]}/${ref.ano} | ${qInfo} | Δ média = mesmos meses disponíveis em 2026`;
+  const viewInfo=isMarcas?`Visão: Top ${topN} marcas (sem agrupar por subcategoria)`:`Visão: por ${ck.toUpperCase()}`;
+  document.getElementById('csMS').textContent=`Ref: ${MN[ref.mn-1]}/${ref.ano} | Ranking por média MS em ${ref.ano} | ${viewInfo} | ${qInfo}`;
 }
 function swMS(el){document.querySelectorAll('#msT .tab').forEach(t=>t.classList.remove('a'));el.classList.add('a');msTab=el.dataset.t;rMSTbl(gF())}
 
