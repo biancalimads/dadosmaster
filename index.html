@@ -625,9 +625,11 @@ function rAnual(fl){
 // ===== RANKING =====
 function rRank(fl){
   const ref=gRef(fl);if(!ref)return;
+  // For "previous month", bypass year/month filters so it ALWAYS shows the immediate prior month
+  const flNoTime={...fl,ano:[],mes:[]};
   const cur=fB(DB.ba,fl).filter(r=>r.ano===ref.ano&&r.mn===ref.mn);
   let pMn=ref.mn-1,pAn=ref.ano;if(pMn<1){pMn=12;pAn--}
-  const prev=fB(DB.ba,fl).filter(r=>r.ano===pAn&&r.mn===pMn);
+  const prev=fB(DB.ba,flNoTime).filter(r=>r.ano===pAn&&r.mn===pMn);
   const cm=ag(cur,r=>r.m),pm=ag(prev,r=>r.m);
   const tC=Array.from(cm.values()).reduce((a,b)=>a+b.v,0);
   const cS=Array.from(cm.entries()).sort((a,b)=>b[1].v-a[1].v);
