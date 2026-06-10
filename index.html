@@ -435,9 +435,9 @@ function initF(f){
   sA=new MS(document.getElementById('wA'),['2025','2026'],go,true);
   sM=new MS(document.getElementById('wM'),MN.map((_,i)=>String(i+1)),go,true);
   sM.its.forEach((it,i)=>{it.el.querySelector('span').textContent=MN[i]});
-  sMC=new MS(document.getElementById('wMC'),MN.map((_,i)=>String(i+1)),go,false,true);
+  sMC=new MS(document.getElementById('wMC'),MN.map((_,i)=>String(i+1)),go);
   sMC.its.forEach((it,i)=>{it.el.querySelector('span').textContent=MN[i]});
-  sAC=new MS(document.getElementById('wAC'),['2025','2026'],go,false,true);
+  sAC=new MS(document.getElementById('wAC'),['2025','2026'],go);
   sMr=new MS(document.getElementById('wMr'),f.M,go);
   sV=new MS(document.getElementById('wV'),f.V,go);
   sC3=new MS(document.getElementById('wC3'),f.c3,go);
@@ -629,8 +629,8 @@ function rAnual(fl){
       },
       scales:{
         x:{grid:{display:false},ticks:{font:{size:12,weight:600},color:'#0f1d33'}},
-        y:{position:'left',beginAtZero:true,grace:'40%',grid:{color:'rgba(15,29,51,.05)'},ticks:{font:{size:10},color:'#475569',callback:v=>fKs(v)},title:{display:true,text:'Vendas',font:{size:10,weight:600},color:'#475569'}},
-        y2:{position:'right',beginAtZero:true,grace:'60%',grid:{display:false},ticks:{font:{size:10},color:'#475569',callback:v=>fKs(v)},title:{display:true,text:'Ticket Médio',font:{size:10,weight:600},color:'#475569'}},
+        y:{position:'left',beginAtZero:true,grace:'40%',grid:{color:'rgba(15,29,51,.05)'},ticks:{font:{size:10},color:'#475569',callback:v=>fK(v)},title:{display:true,text:'Vendas',font:{size:10,weight:600},color:'#475569'}},
+        y2:{position:'right',beginAtZero:true,grace:'60%',grid:{display:false},ticks:{font:{size:10},color:'#475569',callback:v=>fK(v)},title:{display:true,text:'Ticket Médio',font:{size:10,weight:600},color:'#475569'}},
         y3:{position:'right',display:false,min:-150,max:150}
       }
     },plugins:[ChartDataLabels]
@@ -848,6 +848,75 @@ function rYoY(fl){
 function rSub(fl){
   const d=fB(DB.ba,fl);
   const cats=[...new Set(d.map(r=>r.c3))].filter(c=>c&&c!=='-').sort();
+  // Check for comparative mode: MesComp + AnoComp both have selections
+  const mcSel=sMC.get().map(Number),acSel=sAC.get().map(Number);
+  const compMode=mcSel.length>0&&acSel.length>0;
+  const subt=document.getElementById('csS');
+  if(compMode){
+    // ===== COMPARATIVE MODE =====
+    // Current period: matches active filters (already in d)
+    const curByCat=new Map();
+    d.forEach(r=>curByCat.set(r.c3,(curByCat.get(r.c3)||0)+r.v));
+    // Comparative period: bypass year/month filters, apply comp years × comp months
+    const flComp={...fl,ano:[],mes:[]};
+    const compData=fB(DB.ba,flComp).filter(r=>acSel.includes(r.ano)&&mcSel.includes(r.mn));
+    const compByCat=new Map();
+    compData.forEach(r=>compByCat.set(r.c3,(compByCat.get(r.c3)||0)+r.v));
+    // Build period labels
+    const curMonths=new Set(d.map(r=>r.mn)),curYears=new Set(d.map(r=>r.ano));
+    const curMnList=[...curMonths].sort((a,b)=>a-b),curAnoList=[...curYears].sort((a,b)=>a-b);
+    const curLbl=`${curMnList.length===1?MN[curMnList[0]-1]:curMnList.length+' meses'} ${curAnoList.join(',')}`;
+    const compMnList=mcSel.slice().sort((a,b)=>a-b),compAnoList=acSel.slice().sort((a,b)=>a-b);
+    const compLbl=`${compMnList.length===1?MN[compMnList[0]-1]:compMnList.length+' meses'} ${compAnoList.join(',')}`;
+    const curData=cats.map(c=>curByCat.get(c)||0);
+    const compDataArr=cats.map(c=>compByCat.get(c)||0);
+    const yoyArr=cats.map((_,i)=>{const cv=curData[i],pv=compDataArr[i];return pv?(cv-pv)/pv:(cv?1:null)});
+    const datasets=[
+      {label:`Atual — ${curLbl}`,data:curData,backgroundColor:'#2563eb',borderColor:'#1d4ed8',borderWidth:1,borderRadius:3,yoyArr,isCurrent:true},
+      {label:`Comparativo — ${compLbl}`,data:compDataArr,backgroundColor:'#94a3b8',borderColor:'#64748b',borderWidth:1,borderRadius:3,isCurrent:false}
+    ];
+    const h=Math.max(320,cats.length*60+80);
+    document.getElementById('swC').style.height=h+'px';
+    dCh('chS');
+    CH['chS']=new Chart(document.getElementById('chS').getContext('2d'),{
+      type:'bar',data:{labels:cats,datasets},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{font:{size:10,weight:600},padding:8,boxWidth:12,usePointStyle:true,pointStyle:'rectRounded'}},
+          datalabels:{
+            display:ctx=>ctx.dataset.data[ctx.dataIndex]>0?'auto':false,
+            clip:false,
+            color:ctx=>{
+              if(!ctx.dataset.isCurrent)return'#475569';
+              const y=ctx.dataset.yoyArr?ctx.dataset.yoyArr[ctx.dataIndex]:null;
+              if(y==null||Math.abs(y)<0.01)return'#0f1d33';
+              return y>=0?'#059669':'#dc2626';
+            },
+            backgroundColor:'rgba(255,255,255,.96)',
+            borderRadius:3,padding:{top:2,bottom:2,left:5,right:5},
+            font:{size:9,weight:700,lineHeight:1.2},textAlign:'right',
+            anchor:'end',align:'end',offset:4,
+            formatter:(_,ctx)=>{
+              const v=ctx.dataset.data[ctx.dataIndex];if(v<=0)return'';
+              const valStr=fK(v);
+              if(!ctx.dataset.isCurrent)return valStr;
+              const y=ctx.dataset.yoyArr?ctx.dataset.yoyArr[ctx.dataIndex]:null;
+              if(y==null)return valStr;
+              return[valStr,'YoY '+(y>=0?'+':'')+f0(y*100,2)+'%'];
+            }
+          },
+          tooltip:{callbacks:{label(c){
+            const dst=c.dataset;let extra='';
+            if(dst.isCurrent&&dst.yoyArr){const y=dst.yoyArr[c.dataIndex];if(y!=null)extra=` | YoY: ${ds(y)}${f0(y*100,2)}%`}
+            return` ${dst.label}: ${fK(c.raw)}${extra}`;
+          }}}
+        },
+        scales:{y:{grid:{display:false},ticks:{font:{size:10},color:'#0f1d33'}},
+          x:{ticks:{callback:v=>fK(v),font:{size:9},color:'#475569'},grid:{color:'rgba(15,29,51,.04)'}}}
+      },plugins:[ChartDataLabels]});
+    if(subt)subt.textContent=`Comparativo: ${curLbl} vs ${compLbl} — YoY exibido nas barras "Atual"`;
+    return;
+  }
+  // ===== ORIGINAL MoM MODE (no comparative) =====
   const mM=new Map();
   d.forEach(r=>{const k=`${r.ano}-${String(r.mn).padStart(2,'0')}`;if(!mM.has(k))mM.set(k,{ano:r.ano,mn:r.mn,c:{}});mM.get(k).c[r.c3]=(mM.get(k).c[r.c3]||0)+r.v});
   const sM3=Array.from(mM.values()).sort((a,b)=>a.ano!==b.ano?a.ano-b.ano:a.mn-b.mn);
@@ -881,7 +950,7 @@ function rSub(fl){
           formatter:(_,ctx)=>{
             const v=ctx.dataset.data[ctx.dataIndex];if(v<=0)return'';
             const pct=ctx.dataset.pctChange?ctx.dataset.pctChange[ctx.dataIndex]:null;
-            const valStr=fKs(v);
+            const valStr=fK(v);
             if(pct==null||Math.abs(pct)<0.01)return valStr;
             return[valStr,(pct>=0?'+':'')+f0(pct*100,1)+'%'];
           }
@@ -889,8 +958,9 @@ function rSub(fl){
         tooltip:{callbacks:{label(c){const pct=c.dataset.pctChange?c.dataset.pctChange[c.dataIndex]:null;let extra=pct!=null?` (MoM: ${ds(pct)}${f0(pct*100,1)}%)`:'';return` ${c.dataset.label}: ${fK(c.raw)}${extra}`}}}
       },
       scales:{y:{grid:{display:false},ticks:{font:{size:10},color:'#0f1d33'}},
-        x:{ticks:{callback:v=>fKs(v),font:{size:9},color:'#475569'},grid:{color:'rgba(15,29,51,.04)'}}}
+        x:{ticks:{callback:v=>fK(v),font:{size:9},color:'#475569'},grid:{color:'rgba(15,29,51,.04)'}}}
     },plugins:[ChartDataLabels]});
+  if(subt)subt.textContent='Agrupado por subcategoria — MoM% calculado entre meses consecutivos';
 }
 
 // ===== TOP ITEMS =====
