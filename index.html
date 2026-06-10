@@ -816,18 +816,19 @@ function rYoY(fl){
   const acSel=sAC.get();
   const cA=ref.ano,pA=acSel.length?Number(acSel[0]):(cA===2026?2025:2024);
   if(pA===cA){setTblData('tY',[]);document.getElementById('csY').textContent='—';return}
-  const r1=fB(DB.ba,fl).filter(r=>r.ano===cA&&r.mn<=ref.mn);
-  const r2=fB(DB.ba,fl).filter(r=>r.ano===pA&&r.mn<=ref.mn);
+  // Current year: respects all filters (year, month, marca, cat...)
+  const r1=fB(DB.ba,fl).filter(r=>r.ano===cA);
+  const monthsInR1=new Set(r1.map(r=>r.mn));
+  // Comparison year: bypass year filter so it always has data; match same months as r1
+  const flNoYear={...fl,ano:[]};
+  const r2=fB(DB.ba,flNoYear).filter(r=>r.ano===pA&&monthsInR1.has(r.mn));
   const m1=ag(r1,r=>r.m),m2=ag(r2,r=>r.m);
-  const cb=new Map();
-  [...m1.entries()].forEach(([k,v])=>cb.set(k,(cb.get(k)||0)+v.v));
-  [...m2.entries()].forEach(([k,v])=>cb.set(k,(cb.get(k)||0)+v.v));
-  const t10=Array.from(cb.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([k])=>k);
-  // Update headers with year labels
+  // NEW RULE: Top 10 by current-year sales only (largest sale value per the filter)
+  const t10=Array.from(m1.entries()).sort((a,b)=>b[1].v-a[1].v).slice(0,10).map(([k])=>k);
   const ctY=tblS['tY'].cols;
   ctY[1].label=`Vendas ${cA}`;ctY[2].label=`Peças ${cA}`;ctY[3].label=`TM ${cA}`;
   ctY[4].label=`Vendas ${pA}`;ctY[5].label=`Peças ${pA}`;ctY[6].label=`TM ${pA}`;
-  setupTbl('tY',ctY); // re-setup with updated labels
+  setupTbl('tY',ctY);
   const data=t10.map(b=>{
     const a=m1.get(b)||{v:0,p:0},c=m2.get(b)||{v:0,p:0};
     const t1=a.p?a.v/a.p:0,t2=c.p?c.v/c.p:0;
@@ -836,7 +837,11 @@ function rYoY(fl){
     return{b,v1:a.v,p1:a.p,t1,v2:c.v,p2:c.p,t2,dv,dp,dt,pv,pp,pt,__cls:b==='DELLAMED'?'dl':''};
   });
   setTblData('tY',data);
-  document.getElementById('csY').textContent=`Jan–${MN[ref.mn-1]} ${cA} vs ${pA} | MARCA CORRESPONDENTE`;
+  const monthList=[...monthsInR1].sort((a,b)=>a-b);
+  let periodLbl='—';
+  if(monthList.length===1)periodLbl=MN[monthList[0]-1];
+  else if(monthList.length>1)periodLbl=`${MN[monthList[0]-1]}–${MN[monthList[monthList.length-1]-1]}`;
+  document.getElementById('csY').textContent=`${periodLbl} ${cA} vs ${pA} | Top 10 por venda em ${cA}`;
 }
 
 // ===== SUBCATEGORY CHART =====
