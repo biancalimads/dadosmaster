@@ -136,6 +136,23 @@ tbody td:first-child{text-align:left;font-weight:500;color:var(--ink)}
 .b2{background:linear-gradient(135deg,#94a3b8,#64748b);color:#fff}
 .b3{background:linear-gradient(135deg,#a16207,#854d0e);color:#fff}
 .bn{background:var(--blue);color:#fff}
+
+/* Ranking table styling */
+#tR{max-width:1180px;margin:0 auto}
+#tR tbody td{padding:9px 12px}
+#tR tbody tr{transition:.15s}
+#tR tbody tr:nth-child(even){background:rgba(241,246,251,.5)}
+#tR tbody tr:hover{background:var(--blue-soft)!important}
+.rk-badge{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;font-size:12px;font-weight:800;letter-spacing:-.5px}
+.rk-b1{background:linear-gradient(135deg,#fbbf24,#d97706);color:#fff;box-shadow:0 2px 8px rgba(217,119,6,.4)}
+.rk-b2{background:linear-gradient(135deg,#cbd5e1,#64748b);color:#fff;box-shadow:0 2px 6px rgba(100,116,139,.3)}
+.rk-b3{background:linear-gradient(135deg,#c2885f,#854d0e);color:#fff;box-shadow:0 2px 6px rgba(133,77,14,.3)}
+.rk-bn{background:#eff6ff;color:var(--navy);border:1.5px solid var(--blue-l)}
+.rk-name{font-weight:600;color:var(--navy-d);font-size:12px;letter-spacing:-.1px}
+.sh-wrap{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.sh-bar{flex:1;max-width:90px;height:7px;background:#e2e8f0;border-radius:4px;overflow:hidden;min-width:40px}
+.sh-fill{height:100%;background:linear-gradient(90deg,var(--navy),var(--blue),var(--cyan-l));border-radius:4px;box-shadow:0 0 4px rgba(37,99,235,.3)}
+.sh-val{font-weight:700;color:var(--navy);min-width:56px;text-align:right;font-size:12px}
 .pu{color:var(--grn);font-size:9px;font-weight:600}
 .pdn{color:var(--red);font-size:9px;font-weight:600}
 .pe{color:var(--mute);font-size:9px}
@@ -155,6 +172,7 @@ tbody td:first-child{text-align:left;font-weight:500;color:var(--ink)}
 .ms-tbl tbody td{padding:3px 3px}
 .ms-tbl tbody td:first-child{font-size:10px;padding-left:6px;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis}
 .ms-tbl .msc{padding:3px 2px!important;font-size:9px}
+.ms-tbl .msc-plain{background:#fff;color:var(--ink2);font-weight:500;border-left:1px solid var(--line)}
 #msW{overflow-x:auto}
 #msW::-webkit-scrollbar{height:6px}
 #msW::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
@@ -475,12 +493,15 @@ function msCol(v,vals){
 
 function setupAllTables(){
   setupTbl('tR',[
-    {label:'Pos',sortKey:r=>r.rk,render:r=>`<span class="bdr ${r.rk<=3?'b'+r.rk:'bn'}">${r.rk}</span>`},
-    {label:'Marca',sortKey:r=>r.b,render:r=>r.b},
-    {label:'Vendas',sortKey:r=>r.v,render:r=>fK(r.v)},
+    {label:'#',sortKey:r=>r.rk,render:r=>`<span class="rk-badge ${r.rk<=3?'rk-b'+r.rk:'rk-bn'}">${r.rk}</span>`},
+    {label:'Marca',sortKey:r=>r.b,render:r=>`<span class="rk-name">${r.b}</span>`},
+    {label:'Vendas',sortKey:r=>r.v,render:r=>`<span style="font-weight:600;color:var(--navy)">${fK(r.v)}</span>`},
     {label:'Peças',sortKey:r=>r.p,render:r=>f0(r.p)},
     {label:'TM',sortKey:r=>r.tm,render:r=>fK(r.tm)},
-    {label:'Share',sortKey:r=>r.sh,render:r=>`<b>${pc(r.sh)}</b>`},
+    {label:'Share',sortKey:r=>r.sh,render:r=>{
+      const w=Math.max(2,(r.shPct||0)*100);
+      return `<div class="sh-wrap"><div class="sh-bar"><div class="sh-fill" style="width:${w}%"></div></div><span class="sh-val">${pc(r.sh)}</span></div>`;
+    }},
     {label:'Pos.Ant.',sortKey:r=>r.pr,render:r=>r.posC},
   ]);
   setupTbl('tY',[
@@ -637,10 +658,13 @@ function rRank(fl){
   const tC=Array.from(cm.values()).reduce((a,b)=>a+b.v,0);
   const cS=Array.from(cm.entries()).sort((a,b)=>b[1].v-a[1].v);
   const pR=new Map(Array.from(pm.entries()).sort((a,b)=>b[1].v-a[1].v).map(([k],i)=>[k,i+1]));
-  const data=cS.slice(0,10).map(([b,a],i)=>{
+  const top10List=cS.slice(0,10);
+  const maxSh=top10List.length&&tC?top10List[0][1].v/tC:0;
+  const data=top10List.map(([b,a],i)=>{
     const rk=i+1,pr=pR.get(b),sh=tC?a.v/tC:0,tm=a.p?a.v/a.p:0;
+    const shPct=maxSh?sh/maxSh:0;
     let posC='';if(pr!=null){const d=pr-rk;posC=pr+' '+(d>0?`<span class="pu">▲${d}</span>`:d<0?`<span class="pdn">▼${Math.abs(d)}</span>`:`<span class="pe">—</span>`)}else posC='<span class="pe">Novo</span>';
-    return{rk,b,v:a.v,p:a.p,tm,sh,pr,posC,__cls:b==='DELLAMED'?'dl':''};
+    return{rk,b,v:a.v,p:a.p,tm,sh,shPct,pr,posC,__cls:b==='DELLAMED'?'dl':''};
   });
   setTblData('tR',data);
   document.getElementById('csR').textContent=`${MN[ref.mn-1]}/${ref.ano} — Pos. anterior: ${MN[pMn-1]}/${pAn} — Total: ${fK(tC)}`;
@@ -678,10 +702,8 @@ function rMSCh(fl){
   // Build chart series across ALL visible months (full timeline)
   const lb=months.map(m=>`${MN[m.mn-1]}/${m.ano}`);
   const ds2=t10.map((b,i)=>({label:b,data:months.map(m=>{const t=m.total||1;return+((m.brands[b]||0)/t*100).toFixed(2)}),backgroundColor:CC[i%CC.length],stack:'s'}));
-  // Subtitle: top 3 by ref-year avg MS
-  const top3=t10.slice(0,3).map(b=>`${b} ${pc(avgShare.get(b))}`).join(' · ');
   const elS=document.getElementById('csMSch');
-  if(elS)elS.textContent=`Top 10 por média MS em ${refYear} | Líderes: ${top3}`;
+  if(elS)elS.textContent=`Top 10 por média MS em ${refYear}`;
   dCh('chMS');
   CH['chMS']=new Chart(document.getElementById('chMS').getContext('2d'),{type:'bar',data:{labels:lb,datasets:ds2},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
@@ -690,12 +712,6 @@ function rMSCh(fl){
         datalabels:{display:ctx=>{const last=ctx.chart.data.labels.length-1;return ctx.dataIndex===last&&ctx.raw>=3.5},color:'#fff',font:{size:8,weight:700,lineHeight:1.1},textAlign:'center',formatter:(v,ctx)=>[ctx.dataset.label,v.toFixed(2)+'%']}},
       scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:9},color:'#475569'}},y:{stacked:true,max:100,ticks:{callback:v=>v+'%',font:{size:9},color:'#475569'},grid:{color:'rgba(15,29,51,.04)'}}}
     },plugins:[ChartDataLabels]});
-  // Update subtitle showing average ranking
-  const subEl=document.getElementById('csMSch');
-  if(subEl){
-    const avgList=t10.slice(0,3).map(b=>`${b} ${(avgShare.get(b)*100).toFixed(2)}%`).join(' | ');
-    subEl.textContent=`Top 10 por média mensal de MS no período | Líderes: ${avgList}`;
-  }
 }
 
 // ===== MS TABLE =====
@@ -749,25 +765,16 @@ function rMSTbl(fl){
     visibleQ25.forEach(q=>html+=`<th>Q${q}/25</th>`);
     visibleQ26.forEach(q=>html+=`<th>Q${q}/26</th>`);
     html+='<th>Méd 25</th><th>Méd 26</th><th>Δ</th></tr></thead><tbody>';
-    const allColVals=[];
-    const totalCols=sms.length+visibleQ25.length+visibleQ26.length+3;
-    for(let ci=0;ci<totalCols;ci++)allColVals.push([]);
-    topX.forEach((_,bi)=>{
-      sms.forEach((_,mi)=>allColVals[mi].push(monthVals[mi][bi]));
-      let off=sms.length;
-      visibleQ25.forEach(q=>{allColVals[off++].push(q25[q-1][bi])});
-      visibleQ26.forEach(q=>{allColVals[off++].push(q26[q-1][bi])});
-      allColVals[off++].push(avg25[bi]);allColVals[off++].push(avg26[bi]);allColVals[off++].push(delta[bi]);
-    });
     topX.forEach((b,bi)=>{
       const isDl=b==='DELLAMED';
+      // Horizontal scale: color each month cell relative to THIS brand's monthly values
+      const brandMonthVals=sms.map((_,mi)=>monthVals[mi][bi]);
       html+=`<tr class="${isDl?'dl':''}"><td>${b}</td>`;
-      sms.forEach((_,mi)=>{const v=monthVals[mi][bi];html+=`<td class="msc" style="${msCol(v,allColVals[mi])}">${pc(v)}</td>`});
-      let off=sms.length;
-      visibleQ25.forEach(q=>{const v=q25[q-1][bi];html+=`<td class="msc" style="${msCol(v,allColVals[off])}">${pc(v)}</td>`;off++});
-      visibleQ26.forEach(q=>{const v=q26[q-1][bi];html+=`<td class="msc" style="${msCol(v,allColVals[off])}">${pc(v)}</td>`;off++});
-      html+=`<td class="msc" style="${msCol(avg25[bi],allColVals[off++])}">${pc(avg25[bi])}</td>`;
-      html+=`<td class="msc" style="${msCol(avg26[bi],allColVals[off++])}">${pc(avg26[bi])}</td>`;
+      sms.forEach((_,mi)=>{const v=monthVals[mi][bi];html+=`<td class="msc" style="${msCol(v,brandMonthVals)}">${pc(v)}</td>`});
+      visibleQ25.forEach(q=>{const v=q25[q-1][bi];html+=`<td class="msc msc-plain">${pc(v)}</td>`});
+      visibleQ26.forEach(q=>{const v=q26[q-1][bi];html+=`<td class="msc msc-plain">${pc(v)}</td>`});
+      html+=`<td class="msc msc-plain">${pc(avg25[bi])}</td>`;
+      html+=`<td class="msc msc-plain">${pc(avg26[bi])}</td>`;
       const dv=delta[bi];html+=`<td class="msc ${dc(dv)}">${ds(dv)}${pc(dv)}</td>`;
       html+='</tr>';
     });
